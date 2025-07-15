@@ -10,6 +10,7 @@ using System.Windows.Forms;
 using System.Data.SQLite;
 using System.IO;
 using TwinCAT.Ads;
+using TcAdsDll;
 
 namespace Zlewnia
 {
@@ -18,6 +19,13 @@ namespace Zlewnia
         private string connectionString;
         private SQLiteConnection conn;
         private AdsClient adsClient;
+        private bool isReading = false;
+        //private Timer timer;
+        private List<float> phValues = new List<float>();
+        private List<float> ft110Values = new List<float>();
+        private float averagePH = 0;
+        private float resultFT110 = 0;
+
 
         public Form1()
         {
@@ -44,7 +52,7 @@ namespace Zlewnia
                 conn = new SQLiteConnection(connectionString);
                 await conn.OpenAsync(); // Użyj OpenAsync, aby być bardziej konsekwentnym
 
-                MessageBox.Show("Połączono z bazą danych!", "Sukces", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                //MessageBox.Show("Połączono z bazą danych!", "Sukces", MessageBoxButtons.OK, MessageBoxIcon.Information);
 
                 // Ładowanie danych asynchronicznie
                 await LoadDriversAsync();
@@ -82,11 +90,82 @@ namespace Zlewnia
                 adsClient = new AdsClient();
                 await Task.Run(() => adsClient.Connect(amsNetId, adsPort)); // Użycie odczytanych wartości
 
-                MessageBox.Show("Połączono z ADS!", "Sukces", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                //MessageBox.Show("Połączono z ADS!", "Sukces", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
             catch (Exception ex)
             {
                 MessageBox.Show($"Błąd połączenia z ADS:\n{ex.Message}", "Błąd", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        private void SendOpenCommand()
+        {
+            try
+            {
+                // Wysyłanie rozkazu do zmiennej typu bool (true)
+                adsClient.WriteValue("ZASUWY.ZLEWNIA_START", true);
+            }
+            catch (Exception ex)
+            {
+                // Obsługuje wyjątek, jeśli coś pójdzie nie tak
+                MessageBox.Show("Błąd: " + ex.Message);
+            }
+        }
+
+
+        private async Task ReadAdsVariableAsync()
+        {
+            try
+            {
+                while (isReading && adsClient.IsConnected)  // Warunek sprawdzający, czy odczyt ma być kontynuowany
+                {
+                    // Odczyt zmiennej ANALOG.PH.AI_ACT
+                    string variableNamePH = "ANALOG.PH.AI_ACT";  // Zmienna w projekcie TwinCAT
+                    int handlePH = (int)adsClient.CreateVariableHandle(variableNamePH);
+
+                    // Odczyt wartości zmiennej (REAL) z kontrolera Beckhoff
+                    float realValuePH = (float)adsClient.ReadAny((uint)handlePH, typeof(float));
+
+                    // Zamykanie uchwytu zmiennej po zakończeniu
+                    adsClient.DeleteVariableHandle((uint)handlePH);
+
+                    // Odczyt zmiennej ANALOG.FT110.AI_ACT
+                    string variableNameFT110 = "ANALOG.FT110.AI_ACT";  // Zmienna w projekcie TwinCAT
+                    int handleFT110 = (int)adsClient.CreateVariableHandle(variableNameFT110);
+
+                    // Odczyt wartości zmiennej (REAL) z kontrolera Beckhoff
+                    float realValueFT110 = (float)adsClient.ReadAny((uint)handleFT110, typeof(float));
+
+                    // Zamykanie uchwytu zmiennej po zakończeniu
+                    adsClient.DeleteVariableHandle((uint)handleFT110);
+
+                    // Usuwanie poprzednich wartości z list przed dodaniem nowych
+                    //phValues.Clear();
+                    //ft110Values.Clear();
+
+                    // Dodawanie nowych wyników do list
+                    phValues.Add(realValuePH);
+                    ft110Values.Add(realValueFT110);
+
+                    // Obliczanie średniej dla PH
+                    averagePH = phValues.Average();
+
+                    // Sumowanie wartości FT110 i dzielenie przez 3600
+                    resultFT110 = ft110Values.Sum() / 3600;
+
+                    // Aktualizacja TextBox na wątku UI z wartościami obu zmiennych i wynikiem FT110
+                    Invoke(new Action(() =>
+                    {
+                        //textBox1.Text = $"ANALOG.PH.AI_ACT: {realValuePH:F4}";
+                    }));
+
+                    // Opóźnienie 1 sekundy przed kolejnym odczytem
+                    await Task.Delay(1000);
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Błąd odczytu zmiennej: {ex.Message}", "Błąd", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
@@ -238,7 +317,10 @@ namespace Zlewnia
 
                 string dataStartu = dateTimePickerOd.Value.ToString("yyyy-MM-dd HH:mm:ss"); // Data startu
                 string dataKonca = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"); // Data zakończenia
-                int ilosc = 5; // Stała wartość 5
+
+                // Przypisanie wyników do zmiennych
+                float ilosc = resultFT110;  // Wynik FT110
+                float ph = averagePH;       // Średnia z PH
 
                 // Sprawdzenie, czy wartości są poprawne
                 if (string.IsNullOrWhiteSpace(klient) || string.IsNullOrWhiteSpace(kierowca) || string.IsNullOrWhiteSpace(pojazd))
@@ -248,8 +330,8 @@ namespace Zlewnia
                 }
 
                 // Zapytanie SQL do dodania nowego wpisu
-                string query = "INSERT INTO Zlewnia (Datastartu, datakonca, Klient, Kierowca, Pojazd, Ilosc) " +
-                               "VALUES (@Datastartu, @datakonca, @Klient, @Kierowca, @Pojazd, @Ilosc)";
+                string query = "INSERT INTO Zlewnia (Datastartu, datakonca, Klient, Kierowca, Pojazd, Ilosc, PH) " +
+                               "VALUES (@Datastartu, @datakonca, @Klient, @Kierowca, @Pojazd, @Ilosc, @PH)";
 
                 // Asynchroniczna operacja zapisu
                 using (SQLiteCommand cmd = new SQLiteCommand(query, conn))
@@ -259,7 +341,8 @@ namespace Zlewnia
                     cmd.Parameters.AddWithValue("@Klient", klient);
                     cmd.Parameters.AddWithValue("@Kierowca", kierowca);
                     cmd.Parameters.AddWithValue("@Pojazd", pojazd);
-                    cmd.Parameters.AddWithValue("@Ilosc", ilosc);
+                    cmd.Parameters.AddWithValue("@Ilosc", ilosc);  // Wartość FT110
+                    cmd.Parameters.AddWithValue("@PH", ph);        // Wartość średnia PH
 
                     await cmd.ExecuteNonQueryAsync(); // Wykonaj zapytanie asynchronicznie
                 }
@@ -269,6 +352,7 @@ namespace Zlewnia
                 {
                     MessageBox.Show("Dane zostały zapisane pomyślnie!", "Sukces", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 });
+
             }
             catch (Exception ex)
             {
@@ -278,10 +362,15 @@ namespace Zlewnia
                     MessageBox.Show($"Błąd podczas zapisywania danych:\n{ex.Message}", "Błąd", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 });
             }
+            finally
+            {
+                // Wyczyść listy i zmienne po zapisaniu danych
+                phValues.Clear();    // Wyczyść listę wartości PH
+                ft110Values.Clear(); // Wyczyść listę wartości FT110
+                averagePH = 0f;      // Zresetuj średnią PH
+                resultFT110 = 0f;    // Zresetuj wynik FT110
+            }
         }
-
-
-
 
 
         private async Task OdswiezDaneAsync()
@@ -338,9 +427,6 @@ namespace Zlewnia
 
 
 
-
-
-
         private void btn_kierowca_Click(object sender, EventArgs e)
         {
             // Tworzymy nową instancję formularza Kierowca
@@ -369,9 +455,28 @@ namespace Zlewnia
             pojazdForm.Show(); // lub kierowcaForm.ShowDialog(); jeśli formularz ma być modalny
         }
 
+        private void SendCloseCommand()
+        {
+            try
+            {
+                // Wysyłanie rozkazu do zmiennej typu bool (true) dla zamknięcia zasuwy
+                adsClient.WriteValue("ZASUWY.ZLEWNIA_START", false);
+            }
+            catch (Exception ex)
+            {
+                // Obsługuje wyjątek, jeśli coś pójdzie nie tak
+                MessageBox.Show("Błąd: " + ex.Message);
+            }
+        }
+
+
         private async void btn_zakoncz_Click(object sender, EventArgs e)
         {
             await Task.Run(() => InsertRecordIntoZlewniaAsync());
+            isReading = false;
+            await Task.Delay(500);  // Krótkie opóźnienie, aby pętla zdążyła zakończyć działanie
+
+            SendCloseCommand();
         }
 
 
@@ -380,5 +485,45 @@ namespace Zlewnia
             await Task.Run(() => OdswiezDaneAsync()); // Zmieniono na OdswiezDaneAsync
         }
 
+        private async void btn_rozpocznij_Click(object sender, EventArgs e)
+        {
+            SendOpenCommand();
+            isReading = true;
+            await ReadAdsVariableAsync();  // Rozpoczynamy odczyt (czekamy na zakończenie metody asynchronicznej)
+        }
+
+        private void btn_wykresy_Click(object sender, EventArgs e)
+        {
+            // Pobieramy wartości z ComboBox w Form1
+            string kierowca = comboBox_kierowca.SelectedItem?.ToString();
+            string pojazd = comboBox_pojazd.SelectedItem?.ToString();
+            string klient = comboBox_klient.SelectedItem?.ToString();
+
+            // Tworzymy tablice do przekazania do formularza
+            object[] kierowcaItems = comboBox_kierowca.Items.Count > 0 ? comboBox_kierowca.Items.Cast<object>().ToArray() : new object[0];
+            object[] pojazdItems = comboBox_pojazd.Items.Count > 0 ? comboBox_pojazd.Items.Cast<object>().ToArray() : new object[0];
+            object[] klientItems = comboBox_klient.Items.Count > 0 ? comboBox_klient.Items.Cast<object>().ToArray() : new object[0];
+
+            // Otwieramy formularz Wykresy
+            Wykresy wykresyForm = new Wykresy(kierowcaItems, pojazdItems, klientItems);
+            wykresyForm.Show();
+        }
+
+        private void btn_raport_Click(object sender, EventArgs e)
+        {
+            // Pobieramy wartości z ComboBox w Form1
+            string kierowca = comboBox_kierowca.SelectedItem?.ToString();
+            string pojazd = comboBox_pojazd.SelectedItem?.ToString();
+            string klient = comboBox_klient.SelectedItem?.ToString();
+
+            // Tworzymy tablice do przekazania do formularza
+            object[] kierowcaItems = comboBox_kierowca.Items.Count > 0 ? comboBox_kierowca.Items.Cast<object>().ToArray() : new object[0];
+            object[] pojazdItems = comboBox_pojazd.Items.Count > 0 ? comboBox_pojazd.Items.Cast<object>().ToArray() : new object[0];
+            object[] klientItems = comboBox_klient.Items.Count > 0 ? comboBox_klient.Items.Cast<object>().ToArray() : new object[0];
+
+            // Otwieramy formularz Wykresy
+            Raport raportForm = new Raport(kierowcaItems, pojazdItems, klientItems);
+            raportForm.Show();
+        }
     }
 }

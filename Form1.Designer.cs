@@ -44,9 +44,9 @@
             this.comboBox_klient = new System.Windows.Forms.ComboBox();
             this.label6 = new System.Windows.Forms.Label();
             this.btn_pojazd = new System.Windows.Forms.Button();
-            this.pictureBox1 = new System.Windows.Forms.PictureBox();
             this.btn_odswiez = new System.Windows.Forms.Button();
             this.dateTimePickerOd = new System.Windows.Forms.DateTimePicker();
+            this.pictureBox1 = new System.Windows.Forms.PictureBox();
             ((System.ComponentModel.ISupportInitialize)(this.pictureBox1)).BeginInit();
             this.SuspendLayout();
             // 
@@ -92,6 +92,7 @@
             this.btn_rozpocznij.TabIndex = 2;
             this.btn_rozpocznij.Text = "ROZPOCZNIJ";
             this.btn_rozpocznij.UseVisualStyleBackColor = false;
+            this.btn_rozpocznij.Click += new System.EventHandler(this.btn_rozpocznij_Click);
             // 
             // btn_zakoncz
             // 
@@ -232,6 +233,7 @@
             this.btn_wykresy.TabIndex = 15;
             this.btn_wykresy.Text = "WYKRESY";
             this.btn_wykresy.UseVisualStyleBackColor = false;
+            this.btn_wykresy.Click += new System.EventHandler(this.btn_wykresy_Click);
             // 
             // btn_raport
             // 
@@ -250,6 +252,7 @@
             this.btn_raport.TabIndex = 16;
             this.btn_raport.Text = "RAPORT PDF";
             this.btn_raport.UseVisualStyleBackColor = false;
+            this.btn_raport.Click += new System.EventHandler(this.btn_raport_Click);
             // 
             // comboBox_klient
             // 
@@ -303,17 +306,6 @@
             this.btn_pojazd.UseVisualStyleBackColor = false;
             this.btn_pojazd.Click += new System.EventHandler(this.btn_pojazd_Click);
             // 
-            // pictureBox1
-            // 
-            this.pictureBox1.Anchor = System.Windows.Forms.AnchorStyles.None;
-            this.pictureBox1.BackColor = System.Drawing.Color.Transparent;
-            this.pictureBox1.Image = ((System.Drawing.Image)(resources.GetObject("pictureBox1.Image")));
-            this.pictureBox1.Location = new System.Drawing.Point(607, 42);
-            this.pictureBox1.Name = "pictureBox1";
-            this.pictureBox1.Size = new System.Drawing.Size(325, 447);
-            this.pictureBox1.TabIndex = 17;
-            this.pictureBox1.TabStop = false;
-            // 
             // btn_odswiez
             // 
             this.btn_odswiez.Anchor = System.Windows.Forms.AnchorStyles.Top;
@@ -344,6 +336,17 @@
             this.dateTimePickerOd.Name = "dateTimePickerOd";
             this.dateTimePickerOd.Size = new System.Drawing.Size(246, 35);
             this.dateTimePickerOd.TabIndex = 1;
+            // 
+            // pictureBox1
+            // 
+            this.pictureBox1.Anchor = System.Windows.Forms.AnchorStyles.None;
+            this.pictureBox1.BackColor = System.Drawing.Color.Transparent;
+            this.pictureBox1.Image = ((System.Drawing.Image)(resources.GetObject("pictureBox1.Image")));
+            this.pictureBox1.Location = new System.Drawing.Point(607, 42);
+            this.pictureBox1.Name = "pictureBox1";
+            this.pictureBox1.Size = new System.Drawing.Size(325, 447);
+            this.pictureBox1.TabIndex = 17;
+            this.pictureBox1.TabStop = false;
             // 
             // Form1
             // 
